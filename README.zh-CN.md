@@ -100,6 +100,10 @@ subject,period,value,unit,quote
 
 这是审查辅助，不是审计意见。`PASS` 只代表这些数字互相自洽，不代表它们真实、完整或公允；`FAIL` 是**待复核的候选**，不是已证实的错误。
 
+## 同一作者的其他技能
+
+- [skill-trigger-lab](https://github.com/wutianxiang88-hash/skill-trigger-lab)：给任意 `SKILL.md` 做体检——查清技能"静默不触发"的五个原因（description 里未加引号的 `": "`、`name` ≠ 目录名、没有 Use when 场景句……），对比已装技能找冲突，在 CI 里实测触发准确率。
+
 ## 许可
 
 MIT，见 [LICENSE](LICENSE)。

@@ -100,6 +100,10 @@ This makes it usable as a CI gate or as a step an agent can branch on.
 
 This is a review aid, not an audit opinion. A `PASS` here means the figures are mutually consistent — it says nothing about whether they are true, complete, or fairly presented. A `FAIL` is a candidate for review, not a proven error.
 
+## More from this author
+
+- [skill-trigger-lab](https://github.com/wutianxiang88-hash/skill-trigger-lab) — lint any `SKILL.md` for the five reasons skills silently never trigger (unquoted `": "` in the description, `name` ≠ directory, no "Use when" scenario…), detect collisions against your installed set, and measure live trigger accuracy in CI.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

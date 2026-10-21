@@ -1,0 +1,26 @@
+{
+  "company": "Acme Precision Manufacturing (示例公司)",
+  "currency_unit": "万元",
+  "note": "Synthetic data. Three tie-out breaks are planted on purpose: AR outgrew revenue by 50pp, operating cash flow is only 0.20x net profit, and the balance identity is off by 3.2%.",
+  "numbers": [
+    {"subject": "营业收入", "period": "2024年度", "value": 52000, "unit": "万元"},
+    {"subject": "营业收入", "period": "2023年度", "value": 40000, "unit": "万元"},
+
+    {"subject": "应收账款", "period": "2024年末", "value": 18000, "unit": "万元"},
+    {"subject": "应收账款", "period": "2023年末", "value": 10000, "unit": "万元"},
+
+    {"subject": "净利润", "period": "2024年度", "value": 6000, "unit": "万元"},
+    {"subject": "净利润", "period": "2023年度", "value": 5000, "unit": "万元"},
+
+    {"subject": "经营活动产生的现金流量净额", "period": "2024年度", "value": 1200, "unit": "万元"},
+    {"subject": "经营活动产生的现金流量净额", "period": "2023年度", "value": 3000, "unit": "万元"},
+
+    {"subject": "资产总计", "period": "2024年末", "value": 100000, "unit": "万元"},
+    {"subject": "负债合计", "period": "2024年末", "value": 55000, "unit": "万元"},
+    {"subject": "所有者权益合计", "period": "2024年末", "value": 41800, "unit": "万元"},
+
+    {"subject": "资产总计", "period": "2023年末", "value": 85000, "unit": "万元"},
+    {"subject": "负债合计", "period": "2023年末", "value": 50000, "unit": "万元"},
+    {"subject": "所有者权益合计", "period": "2023年末", "value": 35000, "unit": "万元"}
+  ]
+}

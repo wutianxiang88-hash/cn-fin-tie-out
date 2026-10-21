@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cn-fin-tie-out"
+version = "0.1.0"
+description = "Deterministic tie-out checks for Chinese financial statements — let a script do the arithmetic, not a language model."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "wutianxiang88-hash" }]
+keywords = ["finance", "china", "audit", "due-diligence", "tie-out", "llm", "agent-skill", "deterministic"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Office/Business :: Financial :: Accounting",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+
+[project.scripts]
+cn-fin-tie-out = "cn_fin_tie_out.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/wutianxiang88-hash/cn-fin-tie-out"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cn_fin_tie_out = ["py.typed"]

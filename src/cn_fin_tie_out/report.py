@@ -147,16 +147,25 @@ class Report:
         return out
 
     def verdict(self) -> str:
+        """Worst status wins. A parse ERROR outranks a WARN: silently dropping an
+        entry must never read as a clean report."""
         counts = self.counts()
         if counts.get(FAIL):
             return FAIL
+        if counts.get(ERROR):
+            return ERROR
         if counts.get(WARN):
             return WARN
         return PASS
 
     def exit_code(self) -> int:
-        """0 when no FAIL row exists (WARN alone still exits 0), else 1."""
-        return 1 if self.counts().get(FAIL) else 0
+        """1 on any FAIL, 2 on any parse ERROR, else 0 (WARN alone still exits 0)."""
+        counts = self.counts()
+        if counts.get(FAIL):
+            return 1
+        if counts.get(ERROR):
+            return 2
+        return 0
 
     def sorted_items(self) -> List[CheckResult]:
         return sorted(
@@ -306,4 +315,4 @@ class Report:
         }
 
     def to_json(self, indent: int = 2) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent, sort_keys=False)
+        return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent, sort_keys=False, allow_nan=False)

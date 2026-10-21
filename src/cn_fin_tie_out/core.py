@@ -15,6 +15,7 @@ silent skipping with an explicit SKIP/ERROR row plus a reason.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, replace
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -110,13 +111,11 @@ SUBJECT_ALIASES = {
     "营业收入": "revenue",
     "营业总收入": "revenue",
     "主营业务收入": "revenue",
-    "收入": "revenue",
     "revenue": "revenue",
     "净利润": "net_profit",
     "归母净利润": "net_profit",
     "净利润(归母)": "net_profit",
     "归属于母公司股东的净利润": "net_profit",
-    "利润总额": "net_profit",
     "net profit": "net_profit",
     "net_profit": "net_profit",
     "经营活动产生的现金流量净额": "ocf",
@@ -163,15 +162,42 @@ def _metric(value: Optional[float]) -> Optional[float]:
     return round(float(value), METRIC_DECIMALS)
 
 
+# A line whose name contains any of these is a *different* line, never the primary
+# one. Without this, a substring match turns "营业外收入" into revenue and
+# "净利润率" into net profit — which produces confident, wrong PASS verdicts.
+SUBJECT_DENY_TOKENS = (
+    "营业外", "其他业务", "利息", "收益率", "占比", "比例", "减值", "坏账",
+    "准备", "每股", "融资", "保理", "率", "平均", "累计", "其中", "小计",
+    "收益", "费用", "成本", "税金", "折旧", "摊销",
+)
+
+MIN_ALIAS_LEN = 4  # "收入" (2 chars) is too short to identify a line safely
+
+
 def canon_subject(subject: Any) -> str:
-    """Collapse an extracted subject name onto its canonical accounting line."""
+    """Collapse an extracted subject name onto its canonical accounting line.
+
+    Matching is deliberately conservative. An exact name always wins; a name
+    carrying a derived-line marker (a rate, a section subtotal, a non-operating
+    item) is kept as its own bucket; otherwise the longest alias of at least
+    ``MIN_ALIAS_LEN`` characters that appears in the name is used. Returning a
+    distinct bucket is always safer than merging into the wrong line, because a
+    merge can only ever create a false PASS.
+    """
     text = "" if subject is None else str(subject).strip()
+    if not text:
+        return "unnamed_subject"
     if text in SUBJECT_ALIASES:
         return SUBJECT_ALIASES[text]
+    if any(token in text for token in SUBJECT_DENY_TOKENS):
+        return text
+    best: Optional[Tuple[str, str]] = None
     for alias, canonical in SUBJECT_ALIASES.items():
-        if alias and alias in text:
-            return canonical
-    return text or "unnamed_subject"
+        if not alias or len(alias) < MIN_ALIAS_LEN:
+            continue
+        if alias in text and (best is None or len(alias) > len(best[0])):
+            best = (alias, canonical)
+    return best[1] if best else text
 
 
 def parse_period(period: Any) -> Optional[int]:
@@ -191,15 +217,17 @@ def parse_value(value: Any) -> Optional[float]:
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     if isinstance(value, str):
         text = value.strip().replace(",", "").replace("，", "").replace(" ", "")
         if not text:
             return None
         try:
-            return float(text)
+            number = float(text)
         except ValueError:
             return None
+        return number if math.isfinite(number) else None
     return None
 
 
@@ -212,7 +240,8 @@ def convert_to_yuan(value: Any, unit: Any) -> Optional[float]:
     factor = UNIT_TO_YUAN.get(key)
     if factor is None:
         return None
-    return number * factor
+    result = number * factor
+    return result if math.isfinite(result) else None
 
 
 def growth_pct(current: Optional[float], base: Optional[float]) -> Optional[float]:
@@ -362,8 +391,8 @@ def check_yoy(data: Dict[str, List[Dict[str, Any]]], report: Report, tolerances:
             detail = "{} → {}, YoY {:+.1f}%{}".format(
                 format_amount(earlier["yuan"]), format_amount(later["yuan"]), growth, unit_note
             )
-            expected = "|YoY| < {:g}%".format(tolerances.yoy_spike_pct)
-            if abs(growth) >= tolerances.yoy_spike_pct:
+            expected = "|YoY| <= {:g}%".format(tolerances.yoy_spike_pct)
+            if abs(growth) > tolerances.yoy_spike_pct:
                 report.add(
                     CHECK_YOY,
                     subject,
@@ -413,9 +442,25 @@ def check_ar_vs_revenue(
         )
         return
 
-    revenue_growth = _metric(growth_pct(revenue[-1]["yuan"], revenue[0]["yuan"]))
-    ar_growth = _metric(growth_pct(receivables[-1]["yuan"], receivables[0]["yuan"]))
-    span = "{}→{}".format(revenue[0]["year"], revenue[-1]["year"])
+    rev_by_year = {point["year"]: point["yuan"] for point in revenue}
+    ar_by_year = {point["year"]: point["yuan"] for point in receivables}
+    common = sorted(set(rev_by_year) & set(ar_by_year))
+    if len(common) < 2:
+        report.add(
+            CHECK_AR_REV,
+            label,
+            "—",
+            SKIP,
+            "revenue and receivables share fewer than two years, so a like-for-like "
+            "growth comparison is impossible (revenue periods: {}, receivables periods: {})".format(
+                sorted(rev_by_year), sorted(ar_by_year)
+            ),
+        )
+        return
+    first_year, last_year = common[0], common[-1]
+    revenue_growth = _metric(growth_pct(rev_by_year[last_year], rev_by_year[first_year]))
+    ar_growth = _metric(growth_pct(ar_by_year[last_year], ar_by_year[first_year]))
+    span = "{}→{}".format(first_year, last_year)
     if revenue_growth is None or ar_growth is None:
         report.add(
             CHECK_AR_REV,
@@ -431,11 +476,11 @@ def check_ar_vs_revenue(
         "revenue growth {:+.1f}% ({} → {}), receivables growth {:+.1f}% ({} → {}), "
         "gap {:+.1f} pp (threshold {:g})".format(
             revenue_growth,
-            format_amount(revenue[0]["yuan"]),
-            format_amount(revenue[-1]["yuan"]),
+            format_amount(rev_by_year[first_year]),
+            format_amount(rev_by_year[last_year]),
             ar_growth,
-            format_amount(receivables[0]["yuan"]),
-            format_amount(receivables[-1]["yuan"]),
+            format_amount(ar_by_year[first_year]),
+            format_amount(ar_by_year[last_year]),
             gap,
             tolerances.ar_rev_gap_pct,
         )
@@ -471,9 +516,22 @@ def check_ocf_vs_np(
 
     ocf = _points(data, "ocf")
     net_profit = _points(data, "net_profit")
-    latest = max(ocf[-1]["year"], net_profit[-1]["year"])
-    cash = ocf[-1]["yuan"]
-    profit = net_profit[-1]["yuan"]
+    ocf_by_year = {point["year"]: point["yuan"] for point in ocf}
+    np_by_year = {point["year"]: point["yuan"] for point in net_profit}
+    common = sorted(set(ocf_by_year) & set(np_by_year))
+    if not common:
+        report.add(
+            CHECK_OCF_NP,
+            label,
+            "—",
+            SKIP,
+            "operating cash flow and net profit share no year (cash flow periods: {}, "
+            "net profit periods: {})".format(sorted(ocf_by_year), sorted(np_by_year)),
+        )
+        return
+    latest = common[-1]
+    cash = ocf_by_year[latest]
+    profit = np_by_year[latest]
     if profit == 0:
         report.add(
             CHECK_OCF_NP,
@@ -496,10 +554,17 @@ def check_ocf_vs_np(
             tolerances.ocf_np_high,
         )
     )
-    if profit < 0:
-        # Same verdict rule as the original script; the note keeps a negative
-        # denominator from being read as a meaningful ratio.
-        detail += " (note: net profit is negative, so the ratio is not economically meaningful)"
+    if profit < 0 or cash < 0:
+        report.add(
+            CHECK_OCF_NP,
+            label,
+            str(latest),
+            SKIP,
+            detail + " — net profit and operating cash flow have different signs or "
+            "are negative, so their ratio is not economically meaningful; review the "
+            "underlying figures directly",
+        )
+        return
     if ratio < tolerances.ocf_np_low or ratio > tolerances.ocf_np_high:
         report.add(CHECK_OCF_NP, label, str(latest), FAIL, detail + " → divergence", observed=ratio, expected=expected)
     else:
@@ -628,6 +693,8 @@ def backfill_base_years(
                 continue  # skip the current value itself
             if _is_year(quote, match):
                 continue  # "2024年度" — the 2024 is a year, not an amount
+            if _is_percentage(quote, match):
+                continue  # "较上年同期增长15.2%" — a growth rate, not a base amount
             if not _follows_base_hint(quote, match):
                 continue  # only numbers right after "较期初/上年同期" qualify
             yuan = convert_to_yuan(token.replace(",", ""), entry.get("unit"))
@@ -667,6 +734,30 @@ def backfill_base_years(
                 )
             break
     return added
+
+
+PERCENT_SUFFIXES = ("%", "％")
+GROWTH_MARKERS = (
+    "增长", "下降", "提高", "降低", "上升", "减少", "增加", "增幅", "降幅",
+    "变动", "比例", "占比", "同比", "环比",
+)
+
+
+def _is_percentage(quote: str, match: "re.Match") -> bool:
+    """True when the matched number is a rate rather than an amount.
+
+    A quote like "营业收入较上年同期增长15.2%" offers 15.2 as a candidate base
+    value. Taking it would invent a base period out of a growth rate, which is
+    worse than leaving the base missing — so percentage context disqualifies a
+    candidate outright.
+    """
+    tail = quote[match.end(): match.end() + 8]
+    if tail[:1] in PERCENT_SUFFIXES:
+        return True
+    if tail.startswith("个百分点") or tail.startswith("pp"):
+        return True
+    head = quote[max(0, match.start() - 10): match.start()]
+    return any(marker in head for marker in GROWTH_MARKERS)
 
 
 def _same_number(token: str, raw: Any) -> bool:

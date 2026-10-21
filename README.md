@@ -84,7 +84,7 @@ Chinese subject aliases are merged before comparison (`营业收入` / `营业�
 |---|---|
 | `0` | No FAIL (clean, or WARN only) |
 | `1` | At least one FAIL |
-| `2` | The input could not be read or is not usable |
+| `2` | The input could not be read, or some entries could not be parsed (reported as `ERROR`, never silently dropped) |
 
 This makes it usable as a CI gate or as a step an agent can branch on.
 

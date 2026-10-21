@@ -6,7 +6,7 @@ recomputes whether the figures are *consistent* with each other.
 """
 from .core import Tolerances, check, with_tolerances
 from .loaders import Dataset, InputError, load
-from .report import FAIL, PASS, WARN, Report
+from .report import ERROR, FAIL, PASS, SKIP, WARN, Report
 
 __version__ = "0.1.0"
 
@@ -21,5 +21,7 @@ __all__ = [
     "PASS",
     "WARN",
     "FAIL",
+    "SKIP",
+    "ERROR",
     "__version__",
 ]
